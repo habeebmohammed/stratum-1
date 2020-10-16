@@ -256,6 +256,7 @@ namespace dummy_switch {
         break;
       case Request::kMemoryErrorAlarm:
       case Request::kFlowProgrammingExceptionAlarm:
+      case Request::kNodeInfo:
         resp = chassis_mgr_->RetrieveChassisData(request);
         break;
       case Request::kPortQosCounters:
@@ -271,6 +272,16 @@ namespace dummy_switch {
         ::util::Status status =
             phal_interface_->GetFrontPanelPortInfo(slot, port,
                                   resp_val.mutable_front_panel_port_info());
+        if (status.ok()) {
+          resp = resp_val;
+        }
+        break;
+      }
+      case DataRequest::Request::kOpticalTransceiverInfo: {
+        ::util::Status status = phal_interface_->GetOpticalTransceiverInfo(
+            request.optical_transceiver_info().module(),
+            request.optical_transceiver_info().network_interface(),
+            resp_val.mutable_optical_transceiver_info());
         if (status.ok()) {
           resp = resp_val;
         }

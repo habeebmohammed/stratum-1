@@ -19,13 +19,14 @@ int switch_pci_sysfs_str_get(char *name, size_t name_size);
 #include "stratum/hal/lib/phal/phal_sim.h"
 #include "stratum/hal/lib/barefoot/bf_chassis_manager.h"
 #include "stratum/hal/lib/barefoot/bf_pal_wrapper.h"
+#include "stratum/hal/lib/barefoot/bf_pd_wrapper.h"
 #include "stratum/hal/lib/barefoot/bf_switch.h"
 #include "stratum/lib/security/auth_policy_checker.h"
 #include "stratum/lib/security/credentials_manager.h"
 
 using ::pi::fe::proto::DeviceMgr;
 
-DEFINE_string(bf_sde_install, "",
+DEFINE_string(bf_sde_install, "/usr",
               "Absolute path to the directory where the BF SDE is installed");
 DEFINE_bool(bf_switchd_background, false,
             "Run bf_switchd in the background with no interactive features");
@@ -146,7 +147,8 @@ void registerDeviceMgrLogger() {
   auto bf_chassis_manager = BFChassisManager::CreateInstance(
       phal_impl, BFPalWrapper::GetSingleton());
   auto bf_switch = BFSwitch::CreateInstance(
-      phal_impl, bf_chassis_manager.get(), unit_to_pi_node);
+      phal_impl, bf_chassis_manager.get(), BFPdWrapper::GetSingleton(),
+      unit_to_pi_node);
 
   // Create the 'Hal' class instance.
   auto auth_policy_checker = AuthPolicyChecker::CreateInstance();

@@ -28,17 +28,16 @@
 #include "stratum/glue/gtl/cleanup.h"
 #include "stratum/glue/gtl/map_util.h"
 
-DEFINE_string(forwarding_pipeline_configs_file, "",
+DEFINE_string(forwarding_pipeline_configs_file,
+              "/var/run/stratum/pipeline_cfg.pb.txt",
               "The latest set of verified ForwardingPipelineConfig protos "
               "pushed to the switch. This file is updated whenever "
               "ForwardingPipelineConfig proto for switching node is added or "
-              "modified. Default is empty and it is expected to be explicitly "
-              "given by flags.");
-DEFINE_string(write_req_log_file, "",
+              "modified.");
+DEFINE_string(write_req_log_file, "/var/log/stratum/p4_writes.pb.txt",
               "The log file for all the individual write request updates and "
               "the corresponding result. The format for each line is: "
-              "<timestamp>;<node_id>;<update proto>;<status>.  Default is "
-              "empty and it is expected to be explicitly given by flags.");
+              "<timestamp>;<node_id>;<update proto>;<status>.");
 DEFINE_int32(max_num_controllers_per_node, 5,
              "Max number of controllers that can manage a node.");
 DEFINE_int32(max_num_controller_connections, 20,
@@ -210,6 +209,9 @@ namespace {
 void LogWriteRequest(uint64 node_id, const ::p4::v1::WriteRequest& req,
                      const std::vector<::util::Status>& results,
                      const absl::Time timestamp) {
+  if (FLAGS_write_req_log_file.empty()) {
+    return;
+  }
   if (results.size() != req.updates_size()) {
     LOG(ERROR) << "Size mismatch: " << results.size()
                << " != " << req.updates_size() << ". Did not log anything!";
@@ -229,6 +231,19 @@ void LogWriteRequest(uint64 node_id, const ::p4::v1::WriteRequest& req,
     LOG_EVERY_N(ERROR, 50) << "Failed to log the write request: "
                            << status.error_message();
   }
+}
+
+// Helper function to generate a StreamMessageResponse from a failed Status.
+::p4::v1::StreamMessageResponse ToStreamMessageResponse(
+    const ::util::Status& status) {
+  CHECK(!status.ok());
+  ::p4::v1::StreamMessageResponse resp;
+  auto stream_error = resp.mutable_error();
+  stream_error->set_canonical_code(ToGoogleRpcCode(status.CanonicalCode()));
+  stream_error->set_message(status.error_message());
+  stream_error->set_code(status.error_code());
+
+  return resp;
 }
 
 }  // namespace
@@ -534,13 +549,27 @@ void LogWriteRequest(uint64 node_id, const ::p4::v1::WriteRequest& req,
         break;
       }
       case ::p4::v1::StreamMessageRequest::kPacket: {
-        // If this stream is not the master stream do not do anything.
-        if (!IsMasterController(node_id, connection_id)) break;
-        // If master, try to transmit the packet. No error reporting.
+        // If this stream is not the master stream generate a stream error.
+        if (!IsMasterController(node_id, connection_id)) {
+          ::util::Status status = MAKE_ERROR(ERR_PERMISSION_DENIED)
+                                  << "Controller with connection ID "
+                                  << connection_id << "is not a master";
+          LOG_EVERY_N(INFO, 500) << "Failed to transmit packet: " << status;
+          auto resp = ToStreamMessageResponse(status);
+          *resp.mutable_error()->mutable_packet_out()->mutable_packet_out() =
+              req.packet();
+          stream->Write(resp);  // Best effort.
+          break;
+        }
+        // If master, try to transmit the packet.
         ::util::Status status =
             switch_interface_->TransmitPacket(node_id, req.packet());
         if (!status.ok()) {
           LOG_EVERY_N(INFO, 500) << "Failed to transmit packet: " << status;
+          auto resp = ToStreamMessageResponse(status);
+          *resp.mutable_error()->mutable_packet_out()->mutable_packet_out() =
+              req.packet();
+          stream->Write(resp);  // Best effort.
         }
         break;
       }

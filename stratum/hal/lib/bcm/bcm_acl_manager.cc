@@ -19,7 +19,7 @@
 #include "stratum/glue/gtl/map_util.h"
 
 DEFINE_string(bcm_hardware_specs_file,
-              "/opt/watchtower/share/bcm_hardware_specs.pb.txt",
+              "/etc/stratum/bcm_hardware_specs.pb.txt",
               "Path to the file containing the Broadcom hardware map proto.");
 
 namespace stratum {
@@ -391,6 +391,27 @@ std::unique_ptr<BcmAclManager> BcmAclManager::CreateInstance(
   for (uint32 id : unique_physical_table_ids) {
     // Remove unique physical tables from the hardware.
     RETURN_IF_ERROR(bcm_sdk_interface_->DestroyAclTable(unit_, id));
+  }
+  return ::util::OkStatus();
+}
+
+::util::Status BcmAclManager::SplitAclControlBlocks(
+    const P4ControlBlock& control_block,
+    BcmAclStageMap<P4ControlBlock>* stage_blocks) const {
+  for (const auto& statement : control_block.statements()) {
+    // Find the table at the root of this statement.
+    P4ControlTableRef table_reference;
+    if (!GetStatementTableReference(statement, &table_reference)) {
+      VLOG(1) << "Ignoring statement due to non-table root: "
+              << statement.ShortDebugString() << ".";
+      continue;
+    }
+    // Find the ACL stage this statement applies to (VFP, IFP, EFP).
+    BcmAclStage stage =
+        AclTable::P4PipelineToBcmAclStage(table_reference.pipeline_stage());
+    if (stage != BCM_ACL_STAGE_UNKNOWN) {
+      *(*stage_blocks)[stage].add_statements() = statement;
+    }
   }
   return ::util::OkStatus();
 }

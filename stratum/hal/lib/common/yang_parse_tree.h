@@ -402,7 +402,7 @@ class YangParseTree {
                                         const NodeConfigParams& node_config)
       EXCLUSIVE_LOCKS_REQUIRED(root_access_lock_);
   // Add supported leaf handles for one particular interface like xe-1/1/1.
-  void AddSubtreeInterfaceFromOptical(const OpticalPort& optical)
+  void AddSubtreeInterfaceFromOptical(const OpticalNetworkInterface& optical)
       EXCLUSIVE_LOCKS_REQUIRED(root_access_lock_);
   // Add supported leaf handles for one particular interface like xe-1/1/1.
   void AddSubtreeInterfaceFromTrunk(const std::string& name, uint64 node_id,
@@ -455,7 +455,7 @@ class YangParseTree {
       LOCKS_EXCLUDED(root_access_lock_);
 
   // An action that modifies the tree to reflect new configuration.
-  ::util::Status ProcessPushedConfig(const ConfigHasBeenPushedEvent& change)
+  void ProcessPushedConfig(const ConfigHasBeenPushedEvent& change)
       LOCKS_EXCLUDED(root_access_lock_);
 
  protected:
